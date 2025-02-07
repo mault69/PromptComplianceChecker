@@ -84,55 +84,65 @@ class PromptComplianceChecker:
             }
         }
 
-    RETURN_TYPES = ("STRING", "FLOAT", "STRING", "STRING", "STRING")
+    RETURN_TYPES = ("STRING", "FLOAT", "STRING")
     RETURN_NAMES = (
         "CLIP_Result",
         "CLIP_Similarity_Score",
-        "Corrected_Prompt_1",
-        "Corrected_Prompt_2",
-        "Corrected_Prompt_3"
+        "Corrected_Prompt"
     )
 
     FUNCTION = "run"
     CATEGORY = "Analysis"
 
     def generate_gpt_prompt(self, prompt, similarity_score, correction_threshold, gpt_model):
-        """Génère plusieurs alternatives de prompts corrigés."""
+        """Génère un prompt amélioré avec ChatGPT en utilisant l'API OpenAI v1.0.0+."""
         if similarity_score >= correction_threshold or similarity_score == -1:
-            return ["✅ Prompt is well-matched. No correction needed."] * 3
+            return "✅ Prompt is well-matched. No correction needed."
 
         gpt_prompt = f"""
-        The following image does not fully match the prompt provided. 
-        Please generate three different alternative prompts, each improving a specific aspect of the image:
-
-        1️⃣ **Style Correction** - Focus on improving the artistic style.  
-        2️⃣ **Lighting Correction** - Adjust the lighting and ambiance for better accuracy.  
-        3️⃣ **Object & Scene Correction** - Ensure all important elements described in the prompt are present.  
+        The following image does not fully match the prompt provided. Improve the prompt to be more detailed and precise.
 
         **Original Prompt:** {prompt}
         **Similarity Score:** {similarity_score:.2f} (Target: {correction_threshold:.2f})
         """
 
         try:
-            client = OpenAI(api_key=load_api_key())
+            client = OpenAI(api_key=load_api_key())  # ✅ Nouveau format pour OpenAI v1.0.0+
             response = client.chat.completions.create(
                 model=gpt_model,
                 messages=[{"role": "system", "content": gpt_prompt}]
             )
-            corrected_prompts = response.choices[0].message.content.split("\n")
-            return corrected_prompts[:3]  # Renvoie 3 alternatives max
+            return response.choices[0].message.content
 
         except AuthenticationError:
-            return ["⚠️ Invalid API Key. Check api_key.txt."] * 3
+            return "⚠️ Invalid API Key. Check api_key.txt."
 
         except RateLimitError:
-            return ["⚠️ OpenAI Rate Limit Reached. Try again later."] * 3
+            return "⚠️ OpenAI Rate Limit Reached. Try again later."
 
         except OpenAIError as e:
-            return [f"⚠️ OpenAI Error: {str(e)}"] * 3
+            return f"⚠️ OpenAI Error: {str(e)}"
 
         except Exception as e:
-            return [f"⚠️ Unexpected Error: {str(e)}"] * 3
+            return f"⚠️ Unexpected Error: {str(e)}"
+
+    def compute_clip_similarity(self, image, prompt, clip_model, device):
+        """Compare l'image et le prompt avec CLIP pour obtenir un score de similarité."""
+        model, _, preprocess = open_clip.create_model_and_transforms(clip_model, pretrained="openai")
+        model = model.to(device)
+        tokenizer = open_clip.get_tokenizer(clip_model)
+
+        image = preprocess(image).unsqueeze(0).to(device)
+        text = tokenizer([prompt])
+
+        with torch.no_grad():
+            text_features = model.encode_text(text).to(device)
+            image_features = model.encode_image(image).to(device)
+
+        image_features /= image_features.norm(dim=-1, keepdim=True)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+
+        return (image_features @ text_features.T).item() * 100
 
     def run(self, image, prompt, CLIP, device, gpt_model, enable_similarity, enable_gpt_correction, correction_threshold):
         """Exécute l'analyse de conformité du prompt avec l'image."""
@@ -141,13 +151,13 @@ class PromptComplianceChecker:
 
         similarity_score = self.compute_clip_similarity(image, prompt, CLIP, device) if enable_similarity else -1
 
-        corrected_prompts = (
+        corrected_prompt = (
             self.generate_gpt_prompt(prompt, similarity_score, correction_threshold, gpt_model)
             if enable_gpt_correction and load_api_key() else
-            ["✅ Prompt is well-matched. No correction needed."] * 3
+            "✅ Prompt is well-matched. No correction needed."
         )
 
-        return (f"CLIP Model: {CLIP}, Score: {similarity_score:.2f}%", similarity_score, *corrected_prompts)
+        return (f"CLIP Model: {CLIP}, Score: {similarity_score:.2f}%", similarity_score, corrected_prompt)
 
 # 📌 Enregistrement du Node
 NODE_CLASS_MAPPINGS = {"PromptComplianceChecker": PromptComplianceChecker}
