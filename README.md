@@ -22,6 +22,7 @@ La synthèse prend en compte les meilleurs aspects de chaque correction.
 ✅ Activation/Désactivation de la correction GPT (si désactivé, retourne le prompt d’origine).
 ✅ Seuil de correction personnalisable (si le score CLIP est supérieur au seuil, GPT ne modifie pas le prompt).
 ✅ Sélection du modèle CLIP et GPT directement dans ComfyUI.
+
 📌 Résultats Produits
 Nom de la Sortie	Description
 CLIP_Result	Nom du modèle CLIP utilisé + Score de similarité (%)
@@ -30,6 +31,7 @@ Style_Corrected_Prompt	Correction du style artistique
 Lighting_Corrected_Prompt	Correction de l’éclairage et de l’ambiance
 Objects_Corrected_Prompt	Correction des objets et de la mise en scène
 Final_Synthesized_Prompt	Fusion des trois corrections en un prompt final amélioré
+
 📌 Exemple de Fonctionnement
 🎯 Prompt d’Entrée :
 "A futuristic city under a red sunset."
